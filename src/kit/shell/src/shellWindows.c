@@ -17,7 +17,7 @@
 
 void printHelp() {
   char indent[10] = "        ";
-  printf("taos shell is used to test the TAOS database\n");
+  printf("taos shell is used to test the TDEngine database\n");
 
   printf("%s%s\n", indent, "-h");
   printf("%s%s%s\n", indent, indent, "TDEngine server IP address to connect. The default host is localhost.");
@@ -61,7 +61,7 @@ void shellParseArgument(int argc, char *argv[], struct arguments *arguments) {
     // for management port
     else if (strcmp(argv[i], "-P") == 0) {
       if (i < argc - 1) {
-        tsMgmtShellPort = atoi(argv[++i]);
+        arguments->port = atoi(argv[++i]);
       } else {
         fprintf(stderr, "option -P requires an argument\n");
         exit(EXIT_FAILURE);
@@ -76,8 +76,12 @@ void shellParseArgument(int argc, char *argv[], struct arguments *arguments) {
         exit(EXIT_FAILURE);
       }
     } else if (strcmp(argv[i], "-c") == 0) {
-      if (i < argc - 1) {
-        strcpy(configDir, argv[++i]);
+      if (i < argc - 1) {   
+        if (strlen(argv[++i]) >= TSDB_FILENAME_LEN) {
+          fprintf(stderr, "config file path: %s overflow max len %d\n", argv[i], TSDB_FILENAME_LEN - 1);
+          exit(EXIT_FAILURE);
+        }
+        strcpy(configDir, argv[i]);
       } else {
         fprintf(stderr, "Option -c requires an argument\n");
         exit(EXIT_FAILURE);
@@ -201,43 +205,17 @@ void shellReadCommand(TAOS *con, char command[]) {
 void *shellLoopQuery(void *arg) {
   TAOS *con = (TAOS *)arg;
   char *command = malloc(MAX_COMMAND_SIZE);
+  if (command == NULL) return NULL;
 
-  while (1) {
+  do {
     memset(command, 0, MAX_COMMAND_SIZE);
     shellPrintPrompt();
 
     // Read command from shell.
-    char command[MAX_COMMAND_SIZE];
     shellReadCommand(con, command);
-
-    // Run the command
-    if (command != NULL) {
-      shellRunCommand(con, command);
-    }
-  }
+  } while (shellRunCommand(con, command) == 0);
 
   return NULL;
-}
-
-void shellPrintNChar(char *str, int width) {
-  int     col_left = width;
-  wchar_t wc;
-  while (col_left > 0) {
-    if (*str == '\0') break;
-    char *tstr = str;
-    int   byte_width = mbtowc(&wc, tstr, MB_CUR_MAX);
-    int   col_width = byte_width;
-    if (col_left < col_width) break;
-    printf("%lc", wc);
-    str += byte_width;
-    col_left -= col_width;
-  }
-
-  while (col_left > 0) {
-    printf(" ");
-    col_left--;
-  }
-  printf("|");
 }
 
 void get_history_path(char *history) { sprintf(history, "%s/%s", ".", HISTORY_FILE); }

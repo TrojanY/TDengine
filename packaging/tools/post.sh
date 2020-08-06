@@ -4,7 +4,7 @@
 # is required to use systemd to manage services at boot
 #set -x
 # -----------------------Variables definition---------------------
-script_dir=$(dirname $(readlink -m "$0"))
+script_dir=$(dirname $(readlink -f "$0"))
 # Dynamic directory
 data_dir="/var/lib/taos"
 log_dir="/var/log/taos"
@@ -21,6 +21,7 @@ inc_dir="/usr/local/taos/include"
 cfg_install_dir="/etc/taos"
 bin_link_dir="/usr/bin"
 lib_link_dir="/usr/lib"
+lib64_link_dir="/usr/lib64"
 inc_link_dir="/usr/include"
 
 service_config_dir="/etc/systemd/system"
@@ -38,45 +39,56 @@ if command -v sudo > /dev/null; then
     csudo="sudo"
 fi
 
+initd_mod=0
 service_mod=2
 if pidof systemd &> /dev/null; then
     service_mod=0
-elif $(which update-rc.d &> /dev/null); then
+elif $(which service &> /dev/null); then    
     service_mod=1
-    service_config_dir="/etc/init.d"
+    service_config_dir="/etc/init.d" 
+    if $(which chkconfig &> /dev/null); then
+         initd_mod=1 
+    elif $(which insserv &> /dev/null); then
+        initd_mod=2
+    elif $(which update-rc.d &> /dev/null); then
+        initd_mod=3
+    else
+        service_mod=2
+    fi
 else 
     service_mod=2
 fi
 
 function kill_taosd() {
-  ${csudo} pkill -f taosd || :
-}
-
-function is_using_systemd() {
-    if pidof systemd &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
+#  ${csudo} pkill -f taosd || :
+  pid=$(ps -ef | grep "taosd" | grep -v "grep" | awk '{print $2}')
+  if [ -n "$pid" ]; then
+    ${csudo} kill -9 $pid   || :
+  fi
 }
 
 function install_include() {
-    ${csudo} rm -f ${inc_link_dir}/taos.h || :
+    ${csudo} rm -f ${inc_link_dir}/taos.h ${inc_link_dir}/taoserror.h|| :
     ${csudo} ln -s ${inc_dir}/taos.h ${inc_link_dir}/taos.h  
+    ${csudo} ln -s ${inc_dir}/taoserror.h ${inc_link_dir}/taoserror.h  
 }
 
 function install_lib() {
-    ${csudo} rm -f ${lib_link_dir}/libtaos.so || :
+    ${csudo} rm -f ${lib_link_dir}/libtaos* || :
+    ${csudo} rm -f ${lib64_link_dir}/libtaos* || :
     
     ${csudo} ln -s ${lib_dir}/libtaos.* ${lib_link_dir}/libtaos.so.1
     ${csudo} ln -s ${lib_link_dir}/libtaos.so.1 ${lib_link_dir}/libtaos.so
+    
+    ${csudo} ln -s ${lib_dir}/libtaos.* ${lib64_link_dir}/libtaos.so.1           || :
+    ${csudo} ln -s ${lib64_link_dir}/libtaos.so.1 ${lib64_link_dir}/libtaos.so   || :
 }
 
 function install_bin() {
     # Remove links
     ${csudo} rm -f ${bin_link_dir}/taos     || :
     ${csudo} rm -f ${bin_link_dir}/taosd    || :
-    ${csudo} rm -f ${bin_link_dir}/taosdump || :
+    ${csudo} rm -f ${bin_link_dir}/taosdemo || :
     ${csudo} rm -f ${bin_link_dir}/rmtaos   || :
 
     ${csudo} chmod 0555 ${bin_dir}/*
@@ -84,7 +96,7 @@ function install_bin() {
     #Make link
     [ -x ${bin_dir}/taos ] && ${csudo} ln -s ${bin_dir}/taos ${bin_link_dir}/taos             || :
     [ -x ${bin_dir}/taosd ] && ${csudo} ln -s ${bin_dir}/taosd ${bin_link_dir}/taosd          || :
-    [ -x ${bin_dir}/taosdump ] && ${csudo} ln -s ${bin_dir}/taosdump ${bin_link_dir}/taosdump || :
+    [ -x ${bin_dir}/taosdemo ] && ${csudo} ln -s ${bin_dir}/taosdemo ${bin_link_dir}/taosdemo || :
 #   [ -x ${bin_dir}/remove.sh ] && ${csudo} ln -s ${bin_dir}/remove.sh ${bin_link_dir}/rmtaos || :
 }
 
@@ -97,17 +109,54 @@ function install_config() {
 
     ${csudo} mv ${cfg_dir}/taos.cfg ${cfg_dir}/taos.cfg.org
     ${csudo} ln -s ${cfg_install_dir}/taos.cfg ${cfg_dir}
+    #FQDN_FORMAT="(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+    #FQDN_FORMAT="(:[1-6][0-9][0-9][0-9][0-9]$)"
+    #PORT_FORMAT="(/[1-6][0-9][0-9][0-9][0-9]?/)"
+    #FQDN_PATTERN=":[0-9]{1,5}$"
+
+    # first full-qualified domain name (FQDN) for TDengine cluster system
+    echo
+    echo -e -n "${GREEN}Enter FQDN:port (like h1.taosdata.com:6030) of an existing TDengine cluster node to join${NC}"
+    echo
+    echo -e -n "${GREEN}OR leave it blank to build one${NC}:"
+    read firstEp
+    while true; do
+        if [ ! -z "$firstEp" ]; then
+            # check the format of the firstEp
+            #if [[ $firstEp == $FQDN_PATTERN ]]; then
+                # Write the first FQDN to configuration file                    
+                ${csudo} sed -i -r "s/#*\s*(firstEp\s*).*/\1$firstEp/" ${cfg_install_dir}/taos.cfg    
+                break
+            #else
+            #    read -p "Please enter the correct FQDN:port: " firstEp
+            #fi
+        else
+            break
+        fi
+    done	
 }
 
 function clean_service_on_sysvinit() {
-    restart_config_str="taos:2345:respawn:${service_config_dir}/taosd start"
-    #if pidof taosd &> /dev/null; then
-    #    ${csudo} service taosd stop || :
-    #fi
-    ${csudo} sed -i "\|${restart_config_str}|d" /etc/inittab || :
+    #restart_config_str="taos:2345:respawn:${service_config_dir}/taosd start"
+    #${csudo} sed -i "\|${restart_config_str}|d" /etc/inittab || :    
+    
+    if pidof taosd &> /dev/null; then
+        ${csudo} service taosd stop || :
+    fi
+    
+    if ((${initd_mod}==1)); then
+        ${csudo} chkconfig --del taosd || :
+    elif ((${initd_mod}==2)); then
+        ${csudo} insserv -r taosd || :
+    elif ((${initd_mod}==3)); then
+        ${csudo} update-rc.d -f taosd remove || :
+    fi
+    
     ${csudo} rm -f ${service_config_dir}/taosd || :
-    ${csudo} update-rc.d -f taosd remove || :
-    ${csudo} init q || :
+    
+    if $(which init &> /dev/null); then
+        ${csudo} init q || :
+    fi
 }
 
 function install_service_on_sysvinit() {
@@ -118,18 +167,24 @@ function install_service_on_sysvinit() {
     # Install taosd service  
     ${csudo} cp %{init_d_dir}/taosd ${service_config_dir} && ${csudo} chmod a+x ${service_config_dir}/taosd
 
-    restart_config_str="taos:2345:respawn:${service_config_dir}/taosd start"
-
-    ${csudo} grep -q -F "$restart_config_str" /etc/inittab || ${csudo} bash -c "echo '${restart_config_str}' >> /etc/inittab"
-    # TODO: for centos, change here
-    ${csudo} update-rc.d taosd defaults
-    # chkconfig mysqld on
+    #restart_config_str="taos:2345:respawn:${service_config_dir}/taosd start"
+    #${csudo} grep -q -F "$restart_config_str" /etc/inittab || ${csudo} bash -c "echo '${restart_config_str}' >> /etc/inittab"
+    
+    if ((${initd_mod}==1)); then
+        ${csudo} chkconfig --add taosd || :
+        ${csudo} chkconfig --level 2345 taosd on || :
+    elif ((${initd_mod}==2)); then
+        ${csudo} insserv taosd || :
+        ${csudo} insserv -d taosd || :
+    elif ((${initd_mod}==3)); then
+        ${csudo} update-rc.d taosd defaults || :
+    fi
 }
 
 function clean_service_on_systemd() {
     taosd_service_config="${service_config_dir}/taosd.service"
 
-    # taosd service already is stoped before install 
+    # taosd service already is stoped before install in preinst script
     #if systemctl is-active --quiet taosd; then
     #    echo "TDengine is running, stopping it..."
     #    ${csudo} systemctl stop taosd &> /dev/null || echo &> /dev/null
@@ -200,8 +255,8 @@ function install_TDengine() {
     install_config	
 
     # Ask if to start the service
-    echo
-    echo -e "\033[44;32;1mTDengine is installed successfully!${NC}"
+    #echo
+    #echo -e "\033[44;32;1mTDengine is installed successfully!${NC}"
     echo
     echo -e "${GREEN_DARK}To configure TDengine ${NC}: edit /etc/taos/taos.cfg"
     if ((${service_mod}==0)); then
@@ -214,7 +269,13 @@ function install_TDengine() {
     fi
 
     echo -e "${GREEN_DARK}To access TDengine    ${NC}: use ${GREEN_UNDERLINE}taos${NC} in shell${NC}"
-
+    
+    if [ ! -z "$firstEp" ]; then
+        echo		    
+	echo -e "${GREEN_DARK}Please run${NC}: taos -h $firstEp${GREEN_DARK} to login into cluster, then${NC}"
+	echo -e "${GREEN_DARK}execute ${NC}: create dnode 'newDnodeFQDN:port'; ${GREEN_DARK}to add this new node${NC}"
+        echo
+    fi
     echo
     echo -e "\033[44;32;1mTDengine is installed successfully!${NC}"
 }

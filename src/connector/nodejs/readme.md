@@ -1,23 +1,24 @@
 # TDengine Node.js connector
-[![minzip](https://img.shields.io/bundlephobia/minzip/td-connector.svg)](https://github.com/taosdata/TDengine/tree/master/src/connector/nodejs) [![NPM](https://img.shields.io/npm/l/td-connector.svg)](https://github.com/taosdata/TDengine/#what-is-tdengine)
+[![minzip](https://img.shields.io/bundlephobia/minzip/td2.0-connector.svg)](https://github.com/taosdata/TDengine/tree/master/src/connector/nodejs) [![NPM](https://img.shields.io/npm/l/td2.0-connector.svg)](https://github.com/taosdata/TDengine/#what-is-tdengine)
 
-This is the Node.js library that lets you connect to [TDengine](https://www.github.com/taosdata/tdengine). It is built so that you can use as much of it as you want or as little of it as you want through providing an extensive API. If you want the raw data in the form of an array of arrays for the row data retrieved from a table, you can do that. If you want to wrap that data with objects that allow you easily manipulate and display data such as using a prettifier function, you can do that!
+This is the Node.js library that lets you connect to [TDengine](https://www.github.com/taosdata/tdengine) 2.0 version. It is built so that you can use as much of it as you want or as little of it as you want through providing an extensive API. If you want the raw data in the form of an array of arrays for the row data retrieved from a table, you can do that. If you want to wrap that data with objects that allow you easily manipulate and display data such as using a prettifier function, you can do that!
 
 ## Installation
 
 To get started, just type in the following to install the connector through [npm](https://www.npmjs.com/)
 
 ```cmd
-npm install td-connector
+npm install td2.0-connector
 ```
 
 To interact with TDengine, we make use of the [node-gyp](https://github.com/nodejs/node-gyp) library. To install, you will need to install the following depending on platform (the following instructions are quoted from node-gyp)
 
-### On Unix
+### On Linux
 
 - `python` (`v2.7` recommended, `v3.x.x` is **not** supported)
 - `make`
 - A proper C/C++ compiler toolchain, like [GCC](https://gcc.gnu.org)
+- `node` (between `v10.x` and `v11.x`, other version has some dependency compatibility problems)
 
 ### On macOS
 
@@ -71,12 +72,12 @@ The following is a short summary of the basic usage of the connector, the  full 
 
 ### Connection
 
-To use the connector, first require the library ```td-connector```. Running the function ```taos.connect``` with the connection options passed in as an object will return a TDengine connection object. The required connection option is ```host```, other options if not set, will be the default values as shown below.
+To use the connector, first require the library ```td2.0-connector```. Running the function ```taos.connect``` with the connection options passed in as an object will return a TDengine connection object. The required connection option is ```host```, other options if not set, will be the default values as shown below.
 
 A cursor also needs to be initialized in order to interact with TDengine from Node.js.
 
 ```javascript
-const taos = require('td-connector');
+const taos = require('td2.0-connector');
 var conn = taos.connect({host:"127.0.0.1", user:"root", password:"taosdata", config:"/etc/taos",port:0})
 var cursor = conn.cursor(); // Initializing a new cursor
 ```
@@ -106,7 +107,7 @@ promise.then(function(result) {
 
 You can also query by binding parameters to a query by filling in the question marks in a string as so. The query will automatically parse what was binded and convert it to the proper format for use with TDengine
 ```javascript
-var query = cursor.query('select * from meterinfo.meters where ts <= ? and areaid = ?').bind(new Date(), 5);
+var query = cursor.query('select * from meterinfo.meters where ts <= ? and areaid = ?;').bind(new Date(), 5);
 query.execute().then(function(result) {
   result.pretty();
 })
@@ -114,7 +115,7 @@ query.execute().then(function(result) {
 
 The TaosQuery object can also be immediately executed upon creation by passing true as the second argument, returning a promise instead of a TaosQuery.
 ```javascript
-var promise = cursor.query('select * from meterinfo.meters where v1 = 30', true)
+var promise = cursor.query('select * from meterinfo.meters where v1 = 30;', true)
 promise.then(function(result) {
   result.pretty();
 })
@@ -122,7 +123,7 @@ promise.then(function(result) {
 
 If you want to execute queries without objects being wrapped around the data, use ```cursor.execute()``` directly and ```cursor.fetchall()``` to retrieve data if there is any.
 ```javascript
-cursor.execute('select count(*), avg(v1), min(v2) from meterinfo.meters where ts >= \"2019-07-20 00:00:00.000\"');
+cursor.execute('select count(*), avg(v1), min(v2) from meterinfo.meters where ts >= \"2019-07-20 00:00:00.000\";');
 var data = cursor.fetchall();
 console.log(cursor.fields); // Latest query's Field metadata is stored in cursor.fields
 console.log(cursor.data); // Latest query's result data is stored in cursor.data, also returned by fetchall.
@@ -130,8 +131,20 @@ console.log(cursor.data); // Latest query's result data is stored in cursor.data
 
 ### Async functionality
 
-Coming soon
+Async queries can be performed using the same functions such as `cursor.execute`, `TaosQuery.query`, but now with `_a` appended to them.
 
+Say you want to execute an two async query on two separate tables, using `cursor.query`, you can do that and get a TaosQuery object, which upon executing with the `execute_a` function, returns a promise that resolves with a TaosResult object.
+
+```javascript
+var promise1 = cursor.query('select count(*), avg(v1), avg(v2) from meter1;').execute_a()
+var promise2 = cursor.query('select count(*), avg(v1), avg(v2) from meter2;').execute_a();
+promise1.then(function(result) {
+  result.pretty();
+})
+promise2.then(function(result) {
+  result.pretty();
+})
+```
 
 ## Example
 
