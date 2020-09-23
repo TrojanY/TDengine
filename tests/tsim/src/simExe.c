@@ -667,7 +667,7 @@ bool simExecuteNativeSqlCommand(SScript *script, char *rest, bool isSlow) {
 
   TAOS_RES* pSql = NULL;
   
-  for (int attempt = 0; attempt < 3; ++attempt) {
+  for (int attempt = 0; attempt < 10; ++attempt) {
     simLogSql(rest, false);
     pSql = taos_query(script->taos, rest);
     ret = taos_errno(pSql);
@@ -913,6 +913,47 @@ bool simExecuteSqlCmd(SScript *script, char *rest) {
 bool simExecuteSqlSlowCmd(SScript *script, char *rest) {
   bool isSlow = true;
   return simExecuteSqlImpCmd(script, rest, isSlow);
+}
+
+bool simExecuteRestfulCmd(SScript *script, char *rest) {
+  FILE *fp = NULL;
+  char filename[256];
+  sprintf(filename, "%s/tmp.sql", tsScriptDir);  
+  fp = fopen(filename, "w");
+  if (fp == NULL) {
+    fprintf(stderr, "ERROR: failed to open file: %s\n", filename);
+    return false;
+  }
+
+  char db[64] = {0};
+  char tb[64] = {0};
+  char gzip[32] = {0};
+  int32_t ts;
+  int32_t times;
+  sscanf(rest, "%s %s %d %d %s", db, tb, &ts, &times, gzip);
+  
+  fprintf(fp, "insert into %s.%s values ", db, tb);
+  for (int i = 0; i < times; ++i) {
+    fprintf(fp, "(%d000, %d)", ts + i, ts);
+  }
+  fprintf(fp, "  \n");
+  fflush(fp);
+  fclose(fp);
+
+  char cmd[1024] = {0};
+  if (strcmp(gzip, "gzip") == 0) {
+    sprintf(cmd,
+            "curl -H 'Authorization: Taosd /KfeAzX/f9na8qdtNZmtONryp201ma04bEl8LcvLUd7a8qdtNZmtONryp201ma04' --header "
+            "--compressed --data-ascii @%s 127.0.0.1:7111/rest/sql",
+            filename);
+  } else {
+    sprintf(cmd,
+            "curl -H 'Authorization: Taosd /KfeAzX/f9na8qdtNZmtONryp201ma04bEl8LcvLUd7a8qdtNZmtONryp201ma04' --header "
+            "'Transfer-Encoding: chunked' --data-ascii @%s 127.0.0.1:7111/rest/sql",
+            filename);
+  }
+
+  return simExecuteSystemCmd(script, cmd);
 }
 
 bool simExecuteSqlErrorCmd(SScript *script, char *rest) {

@@ -13,6 +13,18 @@ IF (TD_GRANT)
   ADD_DEFINITIONS(-D_GRANT)
 ENDIF ()
 
+IF (TD_SYNC)
+  ADD_DEFINITIONS(-D_SYNC)
+ENDIF ()
+
+IF (TD_MQTT)
+  ADD_DEFINITIONS(-D_MQTT)
+ENDIF ()
+
+IF (TD_TSDB_PLUGINS)
+  ADD_DEFINITIONS(-D_TSDB_PLUGINS)
+ENDIF ()
+
 IF (TD_GODLL)
   ADD_DEFINITIONS(-D_TD_GO_DLL_)
 ENDIF ()
@@ -88,7 +100,7 @@ IF (TD_LINUX)
   ENDIF ()
   
   SET(DEBUG_FLAGS "-O0 -DDEBUG")
-  SET(RELEASE_FLAGS "-O0")
+  SET(RELEASE_FLAGS "-O0 -Wno-unused-variable -Wunused-but-set-variable")
   
   IF (${COVER} MATCHES "true")
     MESSAGE(STATUS "Test coverage mode, add extra flags")

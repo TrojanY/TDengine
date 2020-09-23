@@ -765,7 +765,9 @@ void read_history() {
   FILE *f = fopen(f_history, "r");
   if (f == NULL) {
 #ifndef WINDOWS
-    fprintf(stderr, "Failed to open file %s\n", f_history);
+    if (errno != ENOENT) {
+      fprintf(stderr, "Failed to open file %s, reason:%s\n", f_history, strerror(errno));
+    }
 #endif    
     return;
   }
@@ -786,13 +788,13 @@ void read_history() {
 }
 
 void write_history() {
-  char f_history[128];
+  char f_history[TSDB_FILENAME_LEN];
   get_history_path(f_history);
 
   FILE *f = fopen(f_history, "w");
   if (f == NULL) {
 #ifndef WINDOWS    
-    fprintf(stderr, "Failed to open file %s for write\n", f_history);
+    fprintf(stderr, "Failed to open file %s for write, reason:%s\n", f_history, strerror(errno));
 #endif    
     return;
   }

@@ -580,6 +580,8 @@ static SRpcConn *rpcOpenConn(SRpcInfo *pRpc, char *peerFqdn, uint16_t peerPort, 
       void *shandle = (connType & RPC_CONN_TCP)? pRpc->tcphandle:pRpc->udphandle;
       pConn->chandle = (*taosOpenConn[connType])(shandle, pConn, pConn->peerIp, pConn->peerPort);
       if (pConn->chandle == NULL) {
+        tError("failed to connect to:0x%x:%d", pConn->peerIp, pConn->peerPort);
+
         terrno = TSDB_CODE_RPC_NETWORK_UNAVAIL;
         rpcCloseConn(pConn);
         pConn = NULL;
@@ -709,21 +711,21 @@ static SRpcConn *rpcAllocateServerConn(SRpcInfo *pRpc, SRecvInfo *pRecv) {
       }
 
       if (terrno != 0) {
-        taosFreeId(pRpc->idPool, sid);   // sid shall be released
+        taosFreeId(pRpc->idPool, sid);  // sid shall be released
         pConn = NULL;
       }
     }
-  }      
+  }
 
   if (pConn) {
     if (pRecv->connType == RPC_CONN_UDPS && pRpc->numOfThreads > 1) {
       // UDP server, assign to new connection
-      pRpc->index = (pRpc->index+1) % pRpc->numOfThreads;
+      pRpc->index = (pRpc->index + 1) % pRpc->numOfThreads;
       pConn->localPort = (pRpc->localPort + pRpc->index);
     }
-  
+
     taosHashPut(pRpc->hash, hashstr, size, (char *)&pConn, POINTER_BYTES);
-    tDebug("%s %p server connection is allocated, uid:0x%x", pRpc->label, pConn, pConn->linkUid);
+    tDebug("%s %p server connection is allocated, uid:0x%x sid:%d key:%s", pRpc->label, pConn, pConn->linkUid, sid, hashstr);
   }
 
   return pConn;
