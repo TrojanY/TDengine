@@ -38,7 +38,8 @@ static FORCE_INLINE SWindowResult *getWindowResult(SWindowResInfo *pWindowResInf
   return &pWindowResInfo->pResult[slot];
 }
 
-#define curTimeWindow(_winres)  ((_winres)->curIndex)
+#define curTimeWindowIndex(_winres)        ((_winres)->curIndex)
+#define GET_TIMEWINDOW(_winresInfo, _win)  (STimeWindow) {(_win)->skey, ((_win)->skey + (_winresInfo)->interval - 1)}
 #define GET_ROW_PARAM_FOR_MULTIOUTPUT(_q, tbq, sq) (((tbq) && (!sq))? (_q)->pSelectExpr[1].base.arg->argValue.i64:1)
 
 bool isWindowResClosed(SWindowResInfo *pWindowResInfo, int32_t slot);
@@ -52,7 +53,7 @@ static FORCE_INLINE char *getPosInResultPage(SQueryRuntimeEnv *pRuntimeEnv, int3
   SQuery    *pQuery = pRuntimeEnv->pQuery;
 //  tFilePage *page = getResBufPage(pRuntimeEnv->pResultBuf, pResult->pos.pageId);
 
-  int32_t realRowId = pResult->pos.rowId * GET_ROW_PARAM_FOR_MULTIOUTPUT(pQuery, pRuntimeEnv->topBotQuery, pRuntimeEnv->stableQuery);
+  int32_t realRowId = (int32_t)(pResult->pos.rowId * GET_ROW_PARAM_FOR_MULTIOUTPUT(pQuery, pRuntimeEnv->topBotQuery, pRuntimeEnv->stableQuery));
   return ((char *)page->data) + pRuntimeEnv->offset[columnIndex] * pRuntimeEnv->numOfRowsPerPage +
       pQuery->pSelectExpr[columnIndex].bytes * realRowId;
 }

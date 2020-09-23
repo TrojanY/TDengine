@@ -165,6 +165,13 @@ int32_t dnodeInitMgmtTimer() {
   return TSDB_CODE_SUCCESS;
 }
 
+void dnodeSendStatusMsgToMnode() {
+  if (tsDnodeTmr != NULL && tsStatusTimer != NULL) {
+    dInfo("force send status msg to mnode");
+    taosTmrReset(dnodeSendStatusMsg, 3, NULL, tsDnodeTmr, &tsStatusTimer);
+  }
+}
+
 void dnodeCleanupMgmtTimer() {
   if (tsStatusTimer != NULL) {
     taosTmrStopA(&tsStatusTimer);
@@ -449,7 +456,12 @@ static int32_t dnodeProcessConfigDnodeMsg(SRpcMsg *pMsg) {
 }
 
 void dnodeUpdateMnodeEpSetForPeer(SRpcEpSet *pEpSet) {
-  dInfo("mnode EP list for is changed, numOfEps:%d inUse:%d", pEpSet->numOfEps, pEpSet->inUse);
+  if (pEpSet->numOfEps <= 0) {
+    dError("mnode EP list for peer is changed, but content is invalid, discard it");
+    return;
+  }
+
+  dInfo("mnode EP list for peer is changed, numOfEps:%d inUse:%d", pEpSet->numOfEps, pEpSet->inUse);
   for (int i = 0; i < pEpSet->numOfEps; ++i) {
     pEpSet->port[i] -= TSDB_PORT_DNODEDNODE;
     dInfo("mnode index:%d %s:%u", i, pEpSet->fqdn[i], pEpSet->port[i])
@@ -710,10 +722,13 @@ static void dnodeSendStatusMsg(void *handle, void *tmrId) {
   pStatus->clusterCfg.statusInterval     = htonl(tsStatusInterval);
   pStatus->clusterCfg.maxtablesPerVnode  = htonl(tsMaxTablePerVnode);
   pStatus->clusterCfg.maxVgroupsPerDb    = htonl(tsMaxVgroupsPerDb);
-  strcpy(pStatus->clusterCfg.arbitrator, tsArbitrator);
-  strcpy(pStatus->clusterCfg.timezone, tsTimezone);
-  strcpy(pStatus->clusterCfg.locale, tsLocale);
-  strcpy(pStatus->clusterCfg.charset, tsCharset);  
+  tstrncpy(pStatus->clusterCfg.arbitrator, tsArbitrator, TSDB_EP_LEN);
+  tstrncpy(pStatus->clusterCfg.timezone, tsTimezone, 64);
+  pStatus->clusterCfg.checkTime = 0;
+  char timestr[32] = "1970-01-01 00:00:00.00";
+  (void)taosParseTime(timestr, &pStatus->clusterCfg.checkTime, strlen(timestr), TSDB_TIME_PRECISION_MILLI, 0);
+  tstrncpy(pStatus->clusterCfg.locale, tsLocale, TSDB_LOCALE_LEN);
+  tstrncpy(pStatus->clusterCfg.charset, tsCharset, TSDB_LOCALE_LEN);  
   
   vnodeBuildStatusMsg(pStatus);
   contLen = sizeof(SDMStatusMsg) + pStatus->openVnodes * sizeof(SVnodeLoad);

@@ -29,6 +29,7 @@ extern uint16_t tsServerPort;
 extern uint16_t tsDnodeShellPort;
 extern uint16_t tsDnodeDnodePort;
 extern uint16_t tsSyncPort;
+extern uint16_t tsArbitratorPort;
 extern int32_t  tsStatusInterval;
 extern int32_t  tsNumOfMnodes;
 extern int32_t  tsEnableVnodeBak;
@@ -113,6 +114,7 @@ extern char    tsInternalPass[];
 extern int32_t tsMonitorInterval;
 
 // internal
+extern int32_t tsPrintAuth;
 extern int32_t tscEmbedded;
 extern char    configDir[];
 extern char    tsVnodeDir[];

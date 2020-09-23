@@ -12,15 +12,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#include "qExtbuffer.h"
 #include "os.h"
+#include "qExtbuffer.h"
 #include "queryLog.h"
 #include "taos.h"
 #include "taosdef.h"
 #include "taosmsg.h"
 #include "tsqlfunction.h"
 #include "tulog.h"
-#include "tutil.h"
 
 #define COLMODEL_GET_VAL(data, schema, allrow, rowId, colId) \
   (data + (schema)->pFields[colId].offset * (allrow) + (rowId) * (schema)->pFields[colId].field.bytes)
@@ -172,7 +171,7 @@ int16_t tExtMemBufferPut(tExtMemBuffer *pMemBuffer, void *data, int32_t numOfRow
     pMemBuffer->numOfElemsInBuffer += numOfRows;
     pMemBuffer->numOfTotalElems += numOfRows;
   } else {
-    int32_t numOfRemainEntries = pMemBuffer->numOfElemsPerPage - pLast->item.num;
+    int32_t numOfRemainEntries = pMemBuffer->numOfElemsPerPage - (int32_t)pLast->item.num;
     tColModelAppend(pMemBuffer->pColumnModel, &pLast->item, data, 0, numOfRemainEntries, numOfRows);
 
     pMemBuffer->numOfElemsInBuffer += numOfRemainEntries;
@@ -270,7 +269,7 @@ int32_t tExtMemBufferFlush(tExtMemBuffer *pMemBuffer) {
       return ret;
     }
 
-    pMemBuffer->fileMeta.numOfElemsInFile += first->item.num;
+    pMemBuffer->fileMeta.numOfElemsInFile += (uint32_t)first->item.num;
     pMemBuffer->fileMeta.nFileSize += 1;
 
     tFilePagesItem *ptmp = first;
@@ -322,7 +321,7 @@ void tExtMemBufferClear(tExtMemBuffer *pMemBuffer) {
 }
 
 bool tExtMemBufferLoadData(tExtMemBuffer *pMemBuffer, tFilePage *pFilePage, int32_t flushoutId, int32_t pageIdx) {
-  if (flushoutId < 0 || flushoutId > pMemBuffer->fileMeta.flushoutData.nLength) {
+  if (flushoutId < 0 || flushoutId > (int32_t)pMemBuffer->fileMeta.flushoutData.nLength) {
     return false;
   }
 
@@ -991,7 +990,7 @@ void tColModelCompact(SColumnModel *pModel, tFilePage *inputBuffer, int32_t maxE
     SSchemaEx* pSchemaEx = &pModel->pFields[i];
     memmove(inputBuffer->data + pSchemaEx->offset * inputBuffer->num,
             inputBuffer->data + pSchemaEx->offset * maxElemsCapacity,
-            pSchemaEx->field.bytes * inputBuffer->num);
+            (size_t)(pSchemaEx->field.bytes * inputBuffer->num));
   }
 }
 
@@ -1011,8 +1010,8 @@ void tColModelErase(SColumnModel *pModel, tFilePage *inputBuffer, int32_t blockC
   }
 
   int32_t removed = e - s + 1;
-  int32_t remain = inputBuffer->num - removed;
-  int32_t secPart = inputBuffer->num - e - 1;
+  int32_t remain = (int32_t)inputBuffer->num - removed;
+  int32_t secPart = (int32_t)inputBuffer->num - e - 1;
 
   /* start from the second column */
   for (int32_t i = 0; i < pModel->numOfCols; ++i) {

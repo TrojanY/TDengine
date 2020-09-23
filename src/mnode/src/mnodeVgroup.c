@@ -89,6 +89,7 @@ static int32_t mnodeVgroupActionInsert(SSdbOper *pOper) {
   
   if (pDb->status != TSDB_DB_STATUS_READY) {
     mError("vgId:%d, db:%s status:%d, in dropping", pVgroup->vgId, pDb->name, pDb->status);
+    mnodeDecDbRef(pDb);
     return TSDB_CODE_MND_DB_IN_DROPPING;
   }
 
@@ -164,9 +165,9 @@ static int32_t mnodeVgroupActionUpdate(SSdbOper *pOper) {
 
 
   // reset vgid status on vgroup changed
-  mDebug("vgId:%d, reset sync status to unsynced", pVgroup->vgId);
+  mDebug("vgId:%d, reset sync status to offline", pVgroup->vgId);
   for (int32_t v = 0; v < pVgroup->numOfVnodes; ++v) {
-    pVgroup->vnodeGid[v].role = TAOS_SYNC_ROLE_UNSYNCED;
+    pVgroup->vnodeGid[v].role = TAOS_SYNC_ROLE_OFFLINE;
   }
 
   mnodeDecVgroupRef(pVgroup);
@@ -605,6 +606,10 @@ void mnodeCleanupVgroups() {
   tsVgroupSdb = NULL;
 }
 
+int64_t mnodeGetVgroupNum() {
+  return sdbGetNumOfRows(tsVgroupSdb);
+}
+
 static int32_t mnodeGetVgroupMeta(STableMetaMsg *pMeta, SShowObj *pShow, void *pConn) {
   SDbObj *pDb = mnodeGetDb(pShow->db);
   if (pDb == NULL) {
@@ -613,6 +618,7 @@ static int32_t mnodeGetVgroupMeta(STableMetaMsg *pMeta, SShowObj *pShow, void *p
   
   if (pDb->status != TSDB_DB_STATUS_READY) {
     mError("db:%s, status:%d, in dropping", pDb->name, pDb->status);
+    mnodeDecDbRef(pDb);
     return TSDB_CODE_MND_DB_IN_DROPPING;
   }
 
@@ -704,6 +710,7 @@ static int32_t mnodeRetrieveVgroups(SShowObj *pShow, char *data, int32_t rows, v
 
   if (pDb->status != TSDB_DB_STATUS_READY) {
     mError("db:%s, status:%d, in dropping", pDb->name, pDb->status);
+    mnodeDecDbRef(pDb);
     return 0;
   }
 
@@ -780,7 +787,10 @@ void mnodeAddTableIntoVgroup(SVgObj *pVgroup, SChildTableObj *pTable) {
   if (pTable->sid >= 1) {
     taosIdPoolMarkStatus(pVgroup->idPool, pTable->sid);
     pVgroup->numOfTables++;
-    mnodeIncVgroupRef(pVgroup);
+    // The create vgroup message may be received later than the create table message
+    // and the writing order in sdb is therefore uncertain
+    // which will cause the reference count of the vgroup to be incorrect when restarting
+    // mnodeIncVgroupRef(pVgroup);
   }
 }
 
@@ -788,7 +798,10 @@ void mnodeRemoveTableFromVgroup(SVgObj *pVgroup, SChildTableObj *pTable) {
   if (pTable->sid >= 1) {
     taosFreeId(pVgroup->idPool, pTable->sid);
     pVgroup->numOfTables--;
-    mnodeDecVgroupRef(pVgroup);
+    // The create vgroup message may be received later than the create table message
+    // and the writing order in sdb is therefore uncertain
+    // which will cause the reference count of the vgroup to be incorrect when restarting
+    // mnodeDecVgroupRef(pVgroup);
   }
 }
 

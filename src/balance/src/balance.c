@@ -118,6 +118,7 @@ static void balanceSwapVnodeGid(SVnodeGid *pVnodeGid1, SVnodeGid *pVnodeGid2) {
 }
 
 int32_t balanceAllocVnodes(SVgObj *pVgroup) {
+  static int32_t randIndex = 0;
   int32_t dnode = 0;
   int32_t vnodes = 0;
 
@@ -160,11 +161,11 @@ int32_t balanceAllocVnodes(SVgObj *pVgroup) {
    */
   if (pVgroup->numOfVnodes == 1) {
   } else if (pVgroup->numOfVnodes == 2) {
-    if (rand() % 2 == 0) {
+    if (randIndex++ % 2 == 0) {
       balanceSwapVnodeGid(pVgroup->vnodeGid, pVgroup->vnodeGid + 1);
     }
   } else {
-    int32_t randVal = rand() % 6;
+    int32_t randVal = randIndex++ % 6;
     if (randVal == 1) {  // 1, 0, 2
       balanceSwapVnodeGid(pVgroup->vnodeGid + 0, pVgroup->vnodeGid + 1);
     } else if (randVal == 2) {  // 1, 2, 0
@@ -214,8 +215,8 @@ static bool balanceCheckVgroupReady(SVgObj *pVgroup, SVnodeGid *pRmVnode) {
  * desc: remove one vnode from vgroup
  * all vnodes in vgroup should in ready state, except the balancing one
  **/
-static void balanceRemoveVnode(SVgObj *pVgroup) {
-  if (pVgroup->numOfVnodes <= 1) return;
+static int32_t balanceRemoveVnode(SVgObj *pVgroup) {
+  if (pVgroup->numOfVnodes <= 1) return -1;
 
   SVnodeGid *pRmVnode = NULL;
   SVnodeGid *pSelVnode = NULL;
@@ -258,9 +259,11 @@ static void balanceRemoveVnode(SVgObj *pVgroup) {
 
   if (!balanceCheckVgroupReady(pVgroup, pSelVnode)) {
     mDebug("vgId:%d, is not ready", pVgroup->vgId);
+    return -1;
   } else {
     mDebug("vgId:%d, is ready, discard dnode:%d", pVgroup->vgId, pSelVnode->dnodeId);
     balanceDiscardVnode(pVgroup, pSelVnode);
+    return TSDB_CODE_SUCCESS;
   }
 }
 
@@ -407,18 +410,22 @@ static int32_t balanceMonitorVgroups() {
 
     int32_t dbReplica = pVgroup->pDb->cfg.replications;
     int32_t vgReplica = pVgroup->numOfVnodes;
+    int32_t code = -1;
     
     if (vgReplica > dbReplica) {
       mInfo("vgId:%d, replica:%d numOfVnodes:%d, try remove one vnode", pVgroup->vgId, dbReplica, vgReplica);
       hasUpdatingVgroup = true;
-      balanceRemoveVnode(pVgroup);
+      code = balanceRemoveVnode(pVgroup);
     } else if (vgReplica < dbReplica) {
       mInfo("vgId:%d, replica:%d numOfVnodes:%d, try add one vnode", pVgroup->vgId, dbReplica, vgReplica);
       hasUpdatingVgroup = true;
-      balanceAddVnode(pVgroup, NULL, NULL);
+      code = balanceAddVnode(pVgroup, NULL, NULL);
     }
 
     mnodeDecVgroupRef(pVgroup);
+    if (code == TSDB_CODE_SUCCESS) {
+      break;
+    }
   }
 
   sdbFreeIter(pIter);

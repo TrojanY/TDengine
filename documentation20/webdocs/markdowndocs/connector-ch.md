@@ -45,11 +45,11 @@ C/C++的API类似于MySQL的C API。应用程序使用时，需要包含TDengine
 
   创建数据库连接，初始化连接上下文。其中需要用户提供的参数包含：
 
-  - ip：TDengine管理主节点的IP地址
-  - user：用户名
-  - pass：密码
-  - db：数据库名字，如果用户没有提供，也可以正常连接，用户可以通过该连接创建新的数据库，如果用户提供了数据库名字，则说明该数据库用户已经创建好，缺省使用该数据库
-  - port：端口号
+    - ip：TDengine管理主节点的IP地址
+    - user：用户名
+    - pass：密码
+    - db：数据库名字，如果用户没有提供，也可以正常连接，用户可以通过该连接创建新的数据库，如果用户提供了数据库名字，则说明该数据库用户已经创建好，缺省使用该数据库
+    - port：端口号
   
   返回值为空表示失败。应用程序需要保存返回的参数，以便后续API调用。
 
@@ -157,25 +157,25 @@ C/C++的API类似于MySQL的C API。应用程序使用时，需要包含TDengine
 
   异步执行SQL语句。
   
-  * taos：调用taos_connect返回的数据库连接
-  * sql：需要执行的SQL语句
-  * fp：用户定义的回调函数，其第三个参数`code`用于指示操作是否成功，`0`表示成功，负数表示失败(调用`taos_errstr`获取失败原因)。应用在定义回调函数的时候，主要处理第二个参数`TAOS_RES *`，该参数是查询返回的结果集
-  * param：应用提供一个用于回调的参数
+    * taos：调用taos_connect返回的数据库连接
+    * sql：需要执行的SQL语句
+    * fp：用户定义的回调函数，其第三个参数`code`用于指示操作是否成功，`0`表示成功，负数表示失败(调用`taos_errstr`获取失败原因)。应用在定义回调函数的时候，主要处理第二个参数`TAOS_RES *`，该参数是查询返回的结果集
+    * param：应用提供一个用于回调的参数
 
 - `void taos_fetch_rows_a(TAOS_RES *res, void (*fp)(void *param, TAOS_RES *, int numOfRows), void *param);`
 
   批量获取异步查询的结果集，只能与`taos_query_a`配合使用。其中：
   
-  * res：`taos_query_a`回调时返回的结果集
-  * fp：回调函数。其参数`param`是用户可定义的传递给回调函数的参数结构体；`numOfRows`是获取到的数据的行数（不是整个查询结果集的函数）。 在回调函数中，应用可以通过调用`taos_fetch_row`前向迭代获取批量记录中每一行记录。读完一块内的所有记录后，应用需要在回调函数中继续调用`taos_fetch_rows_a`获取下一批记录进行处理，直到返回的记录数（numOfRows）为零（结果返回完成）或记录数为负值（查询出错）。
+    * res：`taos_query_a`回调时返回的结果集
+    * fp：回调函数。其参数`param`是用户可定义的传递给回调函数的参数结构体；`numOfRows`是获取到的数据的行数（不是整个查询结果集的函数）。 在回调函数中，应用可以通过调用`taos_fetch_row`前向迭代获取批量记录中每一行记录。读完一块内的所有记录后，应用需要在回调函数中继续调用`taos_fetch_rows_a`获取下一批记录进行处理，直到返回的记录数（numOfRows）为零（结果返回完成）或记录数为负值（查询出错）。
 
 
 - `void taos_fetch_row_a(TAOS_RES *res, void (*fp)(void *param, TAOS_RES *, TAOS_ROW row), void *param);`
 
   异步获取一条记录。其中：
 
-  * res：`taos_query_a`回调时返回的结果集
-  * fp：回调函数。其参数`param`是应用提供的一个用于回调的参数。回调时，第三个参数`row`指向一行记录。不同于`taos_fetch_rows_a`，应用无需调用`taos_fetch_row`来获取一行数据，更加简单，但数据提取性能不及批量获取的API。
+    * res：`taos_query_a`回调时返回的结果集
+    * fp：回调函数。其参数`param`是应用提供的一个用于回调的参数。回调时，第三个参数`row`指向一行记录。不同于`taos_fetch_rows_a`，应用无需调用`taos_fetch_row`来获取一行数据，更加简单，但数据提取性能不及批量获取的API。
 
 TDengine的异步API均采用非阻塞调用模式。应用程序可以用多线程同时打开多张表，并可以同时对每张打开的表进行查询或者插入操作。需要指出的是，**客户端应用必须确保对同一张表的操作完全串行化**，即对同一个表的插入或查询操作未完成时（未返回时），不能够执行第二个插入或查询操作。
 
@@ -232,12 +232,12 @@ TDengine提供时间驱动的实时流式计算API。可以每隔一指定的时
 - `TAOS_STREAM *taos_open_stream(TAOS *taos, const char *sql, void (*fp)(void *param, TAOS_RES *, TAOS_ROW row), int64_t stime, void *param, void (*callback)(void *))`
 
   该API用来创建数据流，其中：
-  * taos：已经建立好的数据库连接
-  * sql：SQL查询语句（仅能使用查询语句）
-  * fp：用户定义的回调函数指针，每次流式计算完成后，TDengine将查询的结果（TAOS_ROW）、查询状态（TAOS_RES）、用户定义参数（PARAM）传递给回调函数，在回调函数内，用户可以使用taos_num_fields获取结果集列数，taos_fetch_fields获取结果集每列数据的类型。
-  * stime：是流式计算开始的时间，如果是0，表示从现在开始，如果不为零，表示从指定的时间开始计算（UTC时间从1970/1/1算起的毫秒数）
-  * param：是应用提供的用于回调的一个参数，回调时，提供给应用
-  * callback: 第二个回调函数，会在连续查询自动停止时被调用。
+    * taos：已经建立好的数据库连接
+    * sql：SQL查询语句（仅能使用查询语句）
+    * fp：用户定义的回调函数指针，每次流式计算完成后，TDengine将查询的结果（TAOS_ROW）、查询状态（TAOS_RES）、用户定义参数（PARAM）传递给回调函数，在回调函数内，用户可以使用taos_num_fields获取结果集列数，taos_fetch_fields获取结果集每列数据的类型。
+    * stime：是流式计算开始的时间，如果是0，表示从现在开始，如果不为零，表示从指定的时间开始计算（UTC时间从1970/1/1算起的毫秒数）
+    * param：是应用提供的用于回调的一个参数，回调时，提供给应用
+    * callback: 第二个回调函数，会在连续查询自动停止时被调用。
   
   返回值为NULL，表示创建成功，返回值不为空，表示成功。
 
@@ -254,21 +254,21 @@ TDengine提供时间驱动的实时流式计算API。可以每隔一指定的时
 * `TAOS_SUB *taos_subscribe(TAOS* taos, int restart, const char* topic, const char *sql, TAOS_SUBSCRIBE_CALLBACK fp, void *param, int interval)`
 
   该函数负责启动订阅服务，成功时返回订阅对象，失败时返回 `NULL`，其参数为：
-  * taos：已经建立好的数据库连接
-  * restart：如果订阅已经存在，是重新开始，还是继续之前的订阅
-  * topic：订阅的主题（即名称），此参数是订阅的唯一标识
-  * sql：订阅的查询语句，此语句只能是 `select` 语句，只应查询原始数据，只能按时间正序查询数据
-  * fp：收到查询结果时的回调函数（稍后介绍函数原型），只在异步调用时使用，同步调用时此参数应该传 `NULL`
-  * param：调用回调函数时的附加参数，系统API将其原样传递到回调函数，不进行任何处理
-  * interval：轮询周期，单位为毫秒。异步调用时，将根据此参数周期性的调用回调函数，为避免对系统性能造成影响，不建议将此参数设置的过小；同步调用时，如两次调用`taos_consume`的间隔小于此周期，API将会阻塞，直到时间间隔超过此周期。
+    * taos：已经建立好的数据库连接
+    * restart：如果订阅已经存在，是重新开始，还是继续之前的订阅
+    * topic：订阅的主题（即名称），此参数是订阅的唯一标识
+    * sql：订阅的查询语句，此语句只能是 `select` 语句，只应查询原始数据，只能按时间正序查询数据
+    * fp：收到查询结果时的回调函数（稍后介绍函数原型），只在异步调用时使用，同步调用时此参数应该传 `NULL`
+    * param：调用回调函数时的附加参数，系统API将其原样传递到回调函数，不进行任何处理
+    * interval：轮询周期，单位为毫秒。异步调用时，将根据此参数周期性的调用回调函数，为避免对系统性能造成影响，不建议将此参数设置的过小；同步调用时，如两次调用`taos_consume`的间隔小于此周期，API将会阻塞，直到时间间隔超过此周期。
 
 * `typedef void (*TAOS_SUBSCRIBE_CALLBACK)(TAOS_SUB* tsub, TAOS_RES *res, void* param, int code)`
 
   异步模式下，回调函数的原型，其参数为：
-  * tsub：订阅对象
-  * res：查询结果集，注意结果集中可能没有记录
-  * param：调用 `taos_subscribe`时客户程序提供的附加参数
-  * code：错误码
+    * tsub：订阅对象
+    * res：查询结果集，注意结果集中可能没有记录
+    * param：调用 `taos_subscribe`时客户程序提供的附加参数
+    * code：错误码
 
 
 * `TAOS_RES *taos_consume(TAOS_SUB *tsub)`
@@ -280,327 +280,10 @@ TDengine提供时间驱动的实时流式计算API。可以每隔一指定的时
   取消订阅。 如参数 `keepProgress` 不为0，API会保留订阅的进度信息，后续调用 `taos_subscribe` 时可以基于此进度继续；否则将删除进度信息，后续只能重新开始读取数据。
 
 
-##  Java Connector
-
-TDengine 为了方便 Java 应用使用，提供了遵循 JDBC 标准(3.0)API 规范的 `taos-jdbcdriver` 实现。目前可以通过 [Sonatype Repository][1] 搜索并下载。
-
-由于 TDengine 是使用 c 语言开发的，使用 taos-jdbcdriver 驱动包时需要依赖系统对应的本地函数库。
-
-* libtaos.so 
-    在 linux 系统中成功安装 TDengine 后，依赖的本地函数库 libtaos.so 文件会被自动拷贝至 /usr/lib/libtaos.so，该目录包含在 Linux 自动扫描路径上，无需单独指定。
-    
-* taos.dll
-    在 windows 系统中安装完客户端之后，驱动包依赖的 taos.dll 文件会自动拷贝到系统默认搜索路径 C:/Windows/System32 下，同样无需要单独指定。
-    
-> 注意：在 windows 环境开发时需要安装 TDengine 对应的 [windows 客户端][14]，Linux 服务器安装完 TDengine 之后默认已安装 client，也可以单独安装 [Linux 客户端][15] 连接远程 TDengine Server。
-
-TDengine 的 JDBC 驱动实现尽可能的与关系型数据库驱动保持一致，但时序空间数据库与关系对象型数据库服务的对象和技术特征的差异导致 taos-jdbcdriver 并未完全实现 JDBC 标准规范。在使用时需要注意以下几点：
-
-* TDengine 不提供针对单条数据记录的删除和修改的操作，驱动中也没有支持相关方法。
-* 由于不支持删除和修改，所以也不支持事务操作。
-* 目前不支持表间的 union 操作。
-* 目前不支持嵌套查询(nested query)，对每个 Connection 的实例，至多只能有一个打开的 ResultSet 实例；如果在 ResultSet还没关闭的情况下执行了新的查询，TSDBJDBCDriver 则会自动关闭上一个 ResultSet。
-
-
-## TAOS-JDBCDriver 版本以及支持的 TDengine 版本和 JDK 版本
-
-| taos-jdbcdriver 版本 | TDengine 版本 | JDK 版本 |
-| --- | --- | --- |
-| 2.0.0 | 2.0.0.x 及以上 | 1.8.x |
-| 1.0.3 | 1.6.1.x 及以上 | 1.8.x |
-| 1.0.2 | 1.6.1.x 及以上 | 1.8.x |
-| 1.0.1 | 1.6.1.x 及以上 | 1.8.x |
-
-## TDengine DataType 和 Java DataType
-
-TDengine 目前支持时间戳、数字、字符、布尔类型，与 Java 对应类型转换如下：
-
-| TDengine DataType | Java DataType |
-| --- | --- |
-| TIMESTAMP | java.sql.Timestamp |
-| INT | java.lang.Integer |
-| BIGINT | java.lang.Long |
-| FLOAT | java.lang.Float |
-| DOUBLE | java.lang.Double |
-| SMALLINT, TINYINT |java.lang.Short  |
-| BOOL | java.lang.Boolean |
-| BINARY, NCHAR | java.lang.String |
-
-## 如何获取 TAOS-JDBCDriver
-
-### maven 仓库
-
-目前 taos-jdbcdriver 已经发布到 [Sonatype Repository][1] 仓库，且各大仓库都已同步。
-* [sonatype][8]
-* [mvnrepository][9]
-* [maven.aliyun][10]
-
-maven 项目中使用如下 pom.xml 配置即可：
-
-```xml
-<dependencies>
-    <dependency>
-      <groupId>com.taosdata.jdbc</groupId>
-      <artifactId>taos-jdbcdriver</artifactId>
-      <version>2.0.0</version>
-      <type>jar</type>
-      <scope>system</scope>
-      <systemPath>{localdir}/connector/taos-jdbcdriver-2.0.0-dist.jar</systemPath>
-    </dependency>
-</dependencies>
-```
-
-### 源码编译打包
-
-下载 [TDengine][3] 源码之后，进入 taos-jdbcdriver 源码目录 `src/connector/jdbc` 执行 `mvn clean package` 即可生成相应 jar 包。
-
-
-## 使用说明
-
-### 获取连接
-
-如下所示配置即可获取 TDengine Connection：
-```java
-Class.forName("com.taosdata.jdbc.TSDBDriver");
-String jdbcUrl = "jdbc:TAOS://127.0.0.1:6030/log?user=root&password=taosdata";
-Connection conn = DriverManager.getConnection(jdbcUrl);
-```
-> 端口 6030 为默认连接端口，JDBC URL 中的 log 为系统本身的监控数据库。
-
-TDengine 的 JDBC URL 规范格式为：
-`jdbc:TSDB://{host_ip}:{port}/[database_name]?[user={user}|&password={password}|&charset={charset}|&cfgdir={config_dir}|&locale={locale}|&timezone={timezone}]`
-
-其中，`{}` 中的内容必须，`[]` 中为可选。配置参数说明如下：
-
-* user：登录 TDengine 用户名，默认值 root。
-* password：用户登录密码，默认值 taosdata。
-* charset：客户端使用的字符集，默认值为系统字符集。
-* cfgdir：客户端配置文件目录路径，Linux OS 上默认值 /etc/taos ，Windows OS 上默认值 C:/TDengine/cfg。
-* locale：客户端语言环境，默认值系统当前 locale。
-* timezone：客户端使用的时区，默认值为系统当前时区。
-
-以上参数可以在 3 处配置，`优先级由高到低`分别如下：
-1. JDBC URL 参数
-    如上所述，可以在 JDBC URL 的参数中指定。
-2. java.sql.DriverManager.getConnection(String jdbcUrl, Properties connProps)
-```java
-public Connection getConn() throws Exception{
-  Class.forName("com.taosdata.jdbc.TSDBDriver");
-  String jdbcUrl = "jdbc:TAOS://127.0.0.1:0/log?user=root&password=taosdata";
-  Properties connProps = new Properties();
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_USER, "root");
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_PASSWORD, "taosdata");
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_CONFIG_DIR, "/etc/taos");
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_CHARSET, "UTF-8");
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_LOCALE, "en_US.UTF-8");
-  connProps.setProperty(TSDBDriver.PROPERTY_KEY_TIME_ZONE, "UTC-8");
-  Connection conn = DriverManager.getConnection(jdbcUrl, connProps);
-  return conn;
-}
-```
-
-3. 客户端配置文件 taos.cfg
-
-    linux 系统默认配置文件为 /var/lib/taos/taos.cfg，windows 系统默认配置文件路径为 C:\TDengine\cfg\taos.cfg。
-```properties
-# client default username
-# defaultUser           root
-
-# client default password
-# defaultPass           taosdata
-
-# default system charset
-# charset               UTF-8
-
-# system locale
-# locale                en_US.UTF-8
-```
-> 更多详细配置请参考[客户端配置][13]
-
-### 创建数据库和表
-
-```java
-Statement stmt = conn.createStatement();
-
-// create database
-stmt.executeUpdate("create database if not exists db");
-
-// use database
-stmt.executeUpdate("use db");
-
-// create table
-stmt.executeUpdate("create table if not exists tb (ts timestamp, temperature int, humidity float)");
-```
-> 注意：如果不使用 `use db` 指定数据库，则后续对表的操作都需要增加数据库名称作为前缀，如 db.tb。
-
-### 插入数据
-
-```java
-// insert data
-int affectedRows = stmt.executeUpdate("insert into tb values(now, 23, 10.3) (now + 1s, 20, 9.3)");
-
-System.out.println("insert " + affectedRows + " rows.");
-```
-> now 为系统内部函数，默认为服务器当前时间。
-> `now + 1s` 代表服务器当前时间往后加 1 秒，数字后面代表时间单位：a(毫秒), s(秒), m(分), h(小时), d(天)，w(周), n(月), y(年)。
-
-### 查询数据
-
-```java
-// query data
-ResultSet resultSet = stmt.executeQuery("select * from tb");
-
-Timestamp ts = null;
-int temperature = 0;
-float humidity = 0;
-while(resultSet.next()){
-
-    ts = resultSet.getTimestamp(1);
-    temperature = resultSet.getInt(2);
-    humidity = resultSet.getFloat("humidity");
-
-    System.out.printf("%s, %d, %s\n", ts, temperature, humidity);
-}
-```
-> 查询和操作关系型数据库一致，使用下标获取返回字段内容时从 1 开始，建议使用字段名称获取。
-
-
-### 关闭资源
-
-```java
-resultSet.close();
-stmt.close();
-conn.close();
-```
-> `注意务必要将 connection 进行关闭`，否则会出现连接泄露。
-## 与连接池使用
-
-**HikariCP**
-
-* 引入相应 HikariCP maven 依赖：
-```xml
-<dependency>
-    <groupId>com.zaxxer</groupId>
-    <artifactId>HikariCP</artifactId>
-    <version>3.4.1</version>
-</dependency>
-```
-
-* 使用示例如下：
-```java
- public static void main(String[] args) throws SQLException {
-    HikariConfig config = new HikariConfig();
-    config.setJdbcUrl("jdbc:TAOS://127.0.0.1:6030/log");
-    config.setUsername("root");
-    config.setPassword("taosdata");
-
-    config.setMinimumIdle(3);           //minimum number of idle connection
-    config.setMaximumPoolSize(10);      //maximum number of connection in the pool
-    config.setConnectionTimeout(10000); //maximum wait milliseconds for get connection from pool
-    config.setIdleTimeout(60000);       // max idle time for recycle idle connection 
-    config.setConnectionTestQuery("describe log.dn"); //validation query
-    config.setValidationTimeout(3000);   //validation query timeout
-
-    HikariDataSource ds = new HikariDataSource(config); //create datasource
-    
-    Connection  connection = ds.getConnection(); // get connection
-    Statement statement = connection.createStatement(); // get statement
-    
-    //query or insert 
-    // ...
-    
-    connection.close(); // put back to conneciton pool
-}
-```
-> 通过 HikariDataSource.getConnection() 获取连接后，使用完成后需要调用 close() 方法，实际上它并不会关闭连接，只是放回连接池中。
-> 更多 HikariCP 使用问题请查看[官方说明][5]
-
-**Druid**
-
-* 引入相应 Druid maven 依赖：
-
-```xml
-<dependency>
-    <groupId>com.alibaba</groupId>
-    <artifactId>druid</artifactId>
-    <version>1.1.20</version>
-</dependency>
-```
-
-* 使用示例如下：
-```java
-public static void main(String[] args) throws Exception {
-    Properties properties = new Properties();
-    properties.put("driverClassName","com.taosdata.jdbc.TSDBDriver");
-    properties.put("url","jdbc:TAOS://127.0.0.1:6030/log");
-    properties.put("username","root");
-    properties.put("password","taosdata");
-
-    properties.put("maxActive","10"); //maximum number of connection in the pool
-    properties.put("initialSize","3");//initial number of connection
-    properties.put("maxWait","10000");//maximum wait milliseconds for get connection from pool
-    properties.put("minIdle","3");//minimum number of connection in the pool
-
-    properties.put("timeBetweenEvictionRunsMillis","3000");// the interval milliseconds to test connection
-
-    properties.put("minEvictableIdleTimeMillis","60000");//the minimum milliseconds to keep idle
-    properties.put("maxEvictableIdleTimeMillis","90000");//the maximum milliseconds to keep idle
-
-    properties.put("validationQuery","describe log.dn"); //validation query
-    properties.put("testWhileIdle","true"); // test connection while idle
-    properties.put("testOnBorrow","false"); // don't need while testWhileIdle is true
-    properties.put("testOnReturn","false"); // don't need while testWhileIdle is true
-    
-    //create druid datasource
-    DataSource ds = DruidDataSourceFactory.createDataSource(properties);
-    Connection  connection = ds.getConnection(); // get connection
-    Statement statement = connection.createStatement(); // get statement
-
-    //query or insert 
-    // ...
-
-    connection.close(); // put back to conneciton pool
-}
-```
-> 更多 druid 使用问题请查看[官方说明][6]
-
-**注意事项**
-* TDengine `v1.6.4.1` 版本开始提供了一个专门用于心跳检测的函数 `select server_status()`，所以在使用连接池时推荐使用 `select server_status()` 进行 Validation Query。
-
-如下所示，`select server_status()` 执行成功会返回 `1`。
-```shell
-taos> select server_status();
-server_status()|
-================
-1              |
-Query OK, 1 row(s) in set (0.000141s)
-```
-
-## 与框架使用
-
-* Spring JdbcTemplate 中使用 taos-jdbcdriver，可参考 [SpringJdbcTemplate][11]
-* Springboot + Mybatis 中使用，可参考 [springbootdemo][12]
-
-## 常见问题
-
-* java.lang.UnsatisfiedLinkError: no taos in java.library.path
-  
-  **原因**：程序没有找到依赖的本地函数库 taos。
-  
-  **解决方法**：windows 下可以将 C:\TDengine\driver\taos.dll 拷贝到 C:\Windows\System32\ 目录下，linux 下将建立如下软链 ` ln -s /usr/local/taos/driver/libtaos.so.x.x.x.x /usr/lib/libtaos.so` 即可。
-  
-* java.lang.UnsatisfiedLinkError: taos.dll Can't load AMD 64 bit on a IA 32-bit platform
-  
-  **原因**：目前 TDengine 只支持 64 位 JDK。
-  
-  **解决方法**：重新安装 64 位 JDK。
-
-* 其它问题请参考 [Issues][7]
-
 ## Python Connector
 
 ### 安装准备
-* 已安装TDengine, 如果客户端在Windows上，需要安装Windows 版本的TDengine客户端 [（Windows TDengine 客户端安装）](https://www.taosdata.com/cn/documentation/connector/#Windows客户端及程序接口)
+* 已安装TDengine, 如果客户端在Windows上，需要安装Windows 版本的TDengine客户端 [（Windows TDengine 客户端安装）][4]
 * 已安装python 2.7 or >= 3.4
 * 已安装pip
 
@@ -608,7 +291,7 @@ Query OK, 1 row(s) in set (0.000141s)
 
 #### Linux
 
-用户可以在源代码的src/connector/python文件夹下找到python2和python3的安装包。用户可以通过pip命令安装： 
+用户可以在源代码的src/connector/python（或者tar.gz的/connector/python）文件夹下找到python2和python3的connector安装包。用户可以通过pip命令安装： 
 
 ​		`pip install src/connector/python/linux/python2/`
 
@@ -846,7 +529,7 @@ curl http://192.168.0.1:6041/rest/login/root/taosdata
 - 在demo库里查询表d1001的所有记录： 
 
 ```
-curl -H 'Authorization: Basic cm9vdDp0YW9zZGF0YQ==' -d 'select * from demo.d1001' 192.168.0.1:6041/rest/sql`
+curl -H 'Authorization: Basic cm9vdDp0YW9zZGF0YQ==' -d 'select * from demo.d1001' 192.168.0.1:6041/rest/sql
 ```
 返回值：
 
@@ -865,7 +548,7 @@ curl -H 'Authorization: Basic cm9vdDp0YW9zZGF0YQ==' -d 'select * from demo.d1001
 - 创建库demo：
 
 ```
-curl -H 'Authorization: Basic cm9vdDp0YW9zZGF0YQ==' -d 'create database demo' 192.168.0.1:6041/rest/sql`
+curl -H 'Authorization: Basic cm9vdDp0YW9zZGF0YQ==' -d 'create database demo' 192.168.0.1:6041/rest/sql
 ```
 
 返回值：
@@ -936,12 +619,12 @@ HTTP请求URL采用`sqlutc`时，返回结果集的时间戳将采用UTC时间�
 
 ## Go Connector
 
-TDengine提供了GO驱动程序`taosSql`. `taosSql`实现了GO语言的内置接口`database/sql/driver`。用户只需按如下方式引入包就可以在应用程序中访问TDengin, 详见`https://github.com/taosdata/driver-go/blob/develop/taosSql/driver_test.go`
+TDengine提供了GO驱动程序`taosSql`. `taosSql`实现了GO语言的内置接口`database/sql/driver`。用户只需按如下方式引入包就可以在应用程序中访问TDengine, 详见`https://github.com/taosdata/driver-go/blob/develop/taosSql/driver_test.go`
 
 ```Go
 import (
     "database/sql"
-    _ "github.com/taosdata/driver-go/taoSql"
+    _ "github.com/taosdata/driver-go/taosSql"
 )
 ```
 ### 常用API
@@ -987,7 +670,7 @@ npm install td2.0-connector
 
 - Xcode
 
-  - 然后通过Xcode安装
+    - 然后通过Xcode安装
 
     ```
     Command Line Tools
@@ -1098,4 +781,6 @@ promise2.then(function(result) {
 
 [这里](https://github.com/taosdata/TDengine/tree/master/tests/examples/nodejs/node-example-raw.js)同样是一个使用NodeJS 连接器建表，插入天气数据并查询插入的数据的代码示例，但和上面不同的是，该示例只使用`cursor`.
 
+
+[4]: https://www.taosdata.com/cn/all-downloads/#TDengine-Windows-Client
 

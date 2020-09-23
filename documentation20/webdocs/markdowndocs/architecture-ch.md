@@ -82,7 +82,7 @@ TDengine 分布式架构的逻辑结构图如下：
 ### 节点之间的通讯
 **通讯方式：**TDengine系统的各个节点之间的通讯是通过TCP/UDP进行的。因为考虑到物联网场景，数据写入的包一般不大，因此TDengine 除采用TCP做传输之外，还采用UDP方式，因为UDP 更加高效，而且不受连接数的限制。TDengine实现了自己的超时、重传、确认等机制，以确保UDP的可靠传输。对于数据量不到15K的数据包，采取UDP的方式进行传输，超过15K的，或者是查询类的操作，自动采取TCP的方式进行传输。同时，TDengine根据配置和数据包，会自动对数据进行压缩/解压缩，数字签名/认证等处理。对于数据节点之间的数据复制，只采用TCP方式进行数据传输。
 
-**FQDN配置**：一个数据节点有一个或多个FQDN，可以在系统配置文件taos.cfg通过选项“fqdn"进行指定，如果没有指定，系统将自动获取FQDN。如果节点没有配置FQDN，可以直接使用IP地址作为FQDN，但不建议使用，因为IP地址可变，一旦变化，将让集群无法正常工作。一个数据节点的EP(End Point)由FQDN + Port组成。
+**FQDN配置**：一个数据节点有一个或多个FQDN，可以在系统配置文件taos.cfg通过参数“fqdn"进行指定，如果没有指定，系统将自动获取FQDN。如果节点没有配置FQDN，可以直接将该节点的配置参数fqdn设置为它的IP地址。但不建议使用IP，因为IP地址可变，一旦变化，将让集群无法正常工作。一个数据节点的EP(End Point)由FQDN + Port组成。采用FQDN，需要保证DNS服务正常工作，或者在节点以及应用所在的节点配置好hosts文件。
 
 **端口配置：**一个数据节点对外的端口由TDengine的系统配置参数serverPort决定，对集群内部通讯的端口是serverPort+5。集群内数据节点之间的数据复制操作还占有一个TCP端口，是serverPort+10. 为支持多线程高效的处理UDP数据，每个对内和对外的UDP链接，都需要占用5个连续的端口。因此一个数据节点总的端口范围为serverPort到serverPort + 10，总共11个TCP/UDP端口。使用时，需要确保防火墙将这些端口打开。每个数据节点可以配置不同的serverPort。
 
@@ -162,7 +162,7 @@ Master Vnode遵循下面的写入流程：
 
 <center> 图 3 TDengine Master写入流程  </center>
 1. Master vnode收到应用的数据插入请求，验证OK，进入下一步；
-2. 如果系统配置参数walLevel打开（设置为2），vnode将把该请求的原始数据包写入数据库日志文件WAL，以保证TDengine能够在断电等因素导致的服务重启时从数据库日志文件中恢复数据，避免数据的丢失；
+2. 如果系统配置参数walLevel大于0，vnode将把该请求的原始数据包写入数据库日志文件WAL。如果walLevel设置为2，而且fsync设置为0，TDengine还将WAL数据立即落盘，以保证即使宕机，也能从数据库日志文件中恢复数据，避免数据的丢失；
 3. 如果有多个副本，vnode将把数据包转发给同一虚拟节点组内slave vnodes, 该转发包带有数据的版本号(version)；
 4. 写入内存，并加记录加入到skip list；
 5. Master vnode返回确认信息给应用，表示写入成功。
@@ -174,7 +174,7 @@ Master Vnode遵循下面的写入流程：
 
 <center> 图 4 TDengine Slave写入流程  </center>
 1. Slave vnode收到Master vnode转发了的数据插入请求。
-2. 如果系统配置参数walLevl设置为2，vnode将把该请求的原始数据包写入日志(WAL)；
+2. 如果系统配置参数walLevel大于0，vnode将把该请求的原始数据包写入数据库日志文件WAL。如果walLevel设置为2，而且fsync设置为0，TDengine还将WAL数据立即落盘，以保证即使宕机，也能从数据库日志文件中恢复数据，避免数据的丢失；
 3. 写入内存，更新内存中的skip list。
 
 与Master vnode相比，slave vnode不存在转发环节，也不存在回复确认环节，少了两步。但写内存与WAL是完全一样的。

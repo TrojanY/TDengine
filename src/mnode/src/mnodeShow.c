@@ -98,7 +98,7 @@ static char *mnodeGetShowType(int32_t showType) {
     case TSDB_MGMT_TABLE_MODULE:  return "show modules";
     case TSDB_MGMT_TABLE_QUERIES: return "show queries";
     case TSDB_MGMT_TABLE_STREAMS: return "show streams";
-    case TSDB_MGMT_TABLE_CONFIGS: return "show configs";
+    case TSDB_MGMT_TABLE_VARIABLES: return "show configs";
     case TSDB_MGMT_TABLE_CONNS:   return "show connections";
     case TSDB_MGMT_TABLE_SCORES:  return "show scores";
     case TSDB_MGMT_TABLE_GRANTS:  return "show grants";
@@ -302,7 +302,7 @@ static int32_t mnodeProcessConnectMsg(SMnodeMsg *pMsg) {
   SAcctObj *pAcct = pUser->pAcct;
 
   if (pConnectMsg->db[0]) {
-    char dbName[TSDB_TABLE_ID_LEN * 3] = {0};
+    char dbName[TSDB_TABLE_FNAME_LEN * 3] = {0};
     sprintf(dbName, "%x%s%s", pAcct->acctId, TS_PATH_DELIMITER, pConnectMsg->db);
     SDbObj *pDb = mnodeGetDb(dbName);
     if (pDb == NULL) {
@@ -313,6 +313,7 @@ static int32_t mnodeProcessConnectMsg(SMnodeMsg *pMsg) {
     if (pDb->status != TSDB_DB_STATUS_READY) {
       mError("db:%s, status:%d, in dropping", pDb->name, pDb->status);
       code = TSDB_CODE_MND_DB_IN_DROPPING;
+      mnodeDecDbRef(pDb);
       goto connect_over;
     }
     mnodeDecDbRef(pDb);
@@ -377,7 +378,8 @@ static bool mnodeCheckShowFinished(SShowObj *pShow) {
 }
 
 static bool mnodeAccquireShowObj(SShowObj *pShow) {
-  SShowObj **ppShow = taosCacheAcquireByKey(tsMnodeShowCache, &pShow, sizeof(int64_t));
+  uint64_t handleVal = (uint64_t)pShow;
+  SShowObj **ppShow = taosCacheAcquireByKey(tsMnodeShowCache, &handleVal, sizeof(int64_t));
   if (ppShow) {
     mDebug("%p, show is accquired from cache, data:%p, index:%d", pShow, ppShow, pShow->index);
     return true;
@@ -389,7 +391,8 @@ static bool mnodeAccquireShowObj(SShowObj *pShow) {
 static void* mnodePutShowObj(SShowObj *pShow) {
   if (tsMnodeShowCache != NULL) {
     pShow->index = atomic_add_fetch_32(&tsShowObjIndex, 1);
-    SShowObj **ppShow = taosCachePut(tsMnodeShowCache, &pShow, sizeof(int64_t), &pShow, sizeof(int64_t), 6);
+    uint64_t handleVal = (uint64_t)pShow;
+    SShowObj **ppShow = taosCachePut(tsMnodeShowCache, &handleVal, sizeof(int64_t), &pShow, sizeof(int64_t), 6000);
     pShow->ppShow = (void**)ppShow;
     mDebug("%p, show is put into cache, data:%p index:%d", pShow, ppShow, pShow->index);
     return pShow;

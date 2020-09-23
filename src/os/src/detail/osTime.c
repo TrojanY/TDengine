@@ -61,8 +61,15 @@ int64_t user_mktime64(const unsigned int year0, const unsigned int mon0,
   res  = res*24;
   res  = ((res + hour) * 60 + min) * 60 + sec;
 
+#ifdef _MSC_VER
+#if _MSC_VER >= 1900
+  int64_t timezone = _timezone;
+#endif
+#endif
+
   return (res + timezone);
 }
+
 // ==== mktime() kernel code =================//
 static int64_t m_deltaUtc = 0;
 void deltaToUtcInitOnce() {  
@@ -165,7 +172,7 @@ int32_t parseTimezone(char* str, int64_t* tzOffset) {
 
   char* sep = strchr(&str[i], ':');
   if (sep != NULL) {
-    int32_t len = sep - &str[i];
+    int32_t len = (int32_t)(sep - &str[i]);
 
     hour = strnatoi(&str[i], len);
     i += len + 1;
@@ -212,7 +219,8 @@ int32_t parseTimeWithTz(char* timestr, int64_t* time, int32_t timePrec) {
 
 /* mktime will be affected by TZ, set by using taos_options */
 #ifdef WINDOWS
-  int64_t seconds = gmtime(&tm); 
+  int64_t seconds = user_mktime64(tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  //int64_t seconds = gmtime(&tm); 
 #else
   int64_t seconds = timegm(&tm);
 #endif
@@ -311,6 +319,8 @@ int32_t parseLocaltimeWithDst(char* timestr, int64_t* time, int32_t timePrec) {
   *time = factor * seconds + fraction;
   return 0;
 }
+
+
 static int32_t getTimestampInUsFromStrImpl(int64_t val, char unit, int64_t* result) {
   *result = val;
 
@@ -374,6 +384,23 @@ int32_t getTimestampInUsFromStr(char* token, int32_t tokenlen, int64_t* ts) {
   }
 
   return getTimestampInUsFromStrImpl(timestamp, token[tokenlen - 1], ts);
+}
+
+int32_t parseDuration(const char* token, int32_t tokenLen, int64_t* duration, char* unit) {
+  errno = 0;
+
+  /* get the basic numeric value */
+  *duration = strtoll(token, NULL, 10);
+  if (errno != 0) {
+    return -1;
+  }
+
+  *unit = token[tokenLen - 1];
+  if (*unit == 'n' || *unit == 'y') {
+    return 0;
+  }
+
+  return getTimestampInUsFromStrImpl(*duration, *unit, duration);
 }
 
 // internal function, when program is paused in debugger,

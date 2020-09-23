@@ -24,6 +24,10 @@ extern "C" {
 #include "osDarwin.h"
 #endif
 
+#ifdef _TD_ARM_64_
+#include "osArm64.h"
+#endif
+
 #ifdef _TD_LINUX_64
 #include "osLinux64.h"
 #endif
@@ -36,11 +40,16 @@ extern "C" {
 #include "osAlpine.h"
 #endif
 
+#ifdef _TD_NINGSI_60_
+#include "osNingsi.h"
+#endif
+
 #if defined(_TD_WINDOWS_64) || defined(_TD_WINDOWS_32)
 #include "osWindows.h"
 #endif
 
 #include "osAtomic.h"
+#include "osCommon.h"
 #include "osDef.h"
 #include "osDir.h"
 #include "osFile.h"

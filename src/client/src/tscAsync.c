@@ -43,6 +43,7 @@ void doAsyncQuery(STscObj* pObj, SSqlObj* pSql, void (*fp)(), void* param, const
   pSql->signature = pSql;
   pSql->param     = param;
   pSql->pTscObj   = pObj;
+  pSql->parseRetry= 0;
   pSql->maxRetry  = TSDB_MAX_REPLICA;
   pSql->fp        = fp;
   pSql->fetchFp   = fp;
@@ -50,11 +51,12 @@ void doAsyncQuery(STscObj* pObj, SSqlObj* pSql, void (*fp)(), void* param, const
   pSql->sqlstr = calloc(1, sqlLen + 1);
   if (pSql->sqlstr == NULL) {
     tscError("%p failed to malloc sql string buffer", pSql);
-    tscQueueAsyncError(pSql->fp, pSql->param, TSDB_CODE_TSC_OUT_OF_MEMORY);
+    pSql->res.code = TSDB_CODE_TSC_OUT_OF_MEMORY;
+    tscQueueAsyncRes(pSql);
     return;
   }
 
-  strntolower(pSql->sqlstr, sqlstr, sqlLen);
+  strntolower(pSql->sqlstr, sqlstr, (int32_t)sqlLen);
 
   tscDebugL("%p SQL: %s", pSql, pSql->sqlstr);
   pSql->cmd.curSql = pSql->sqlstr;
@@ -81,7 +83,7 @@ void taos_query_a(TAOS *taos, const char *sqlstr, __async_cb_func_t fp, void *pa
     return;
   }
   
-  int32_t sqlLen = strlen(sqlstr);
+  int32_t sqlLen = (int32_t)strlen(sqlstr);
   if (sqlLen > tsMaxSQLStringLen) {
     tscError("sql string exceeds max length:%d", tsMaxSQLStringLen);
     terrno = TSDB_CODE_TSC_INVALID_SQL;
@@ -94,7 +96,6 @@ void taos_query_a(TAOS *taos, const char *sqlstr, __async_cb_func_t fp, void *pa
   SSqlObj *pSql = (SSqlObj *)calloc(1, sizeof(SSqlObj));
   if (pSql == NULL) {
     tscError("failed to malloc sqlObj");
-    terrno = TSDB_CODE_TSC_OUT_OF_MEMORY;
     tscQueueAsyncError(fp, param, TSDB_CODE_TSC_OUT_OF_MEMORY);
     return;
   }
@@ -191,7 +192,7 @@ void tscAsyncQuerySingleRowForNextVnode(void *param, TAOS_RES *tres, int numOfRo
   tscProcessAsyncRetrieveImpl(param, tres, numOfRows, tscAsyncFetchSingleRowProxy);
 }
 
-void taos_fetch_rows_a(TAOS_RES *taosa, void (*fp)(void *, TAOS_RES *, int), void *param) {
+void taos_fetch_rows_a(TAOS_RES *taosa, __async_cb_func_t fp, void *param) {
   SSqlObj *pSql = (SSqlObj *)taosa;
   if (pSql == NULL || pSql->signature != pSql) {
     tscError("sql object is NULL");
@@ -209,6 +210,8 @@ void taos_fetch_rows_a(TAOS_RES *taosa, void (*fp)(void *, TAOS_RES *, int), voi
   if (pRes->qhandle == 0) {
     tscError("qhandle is NULL");
     pRes->code = TSDB_CODE_TSC_INVALID_QHANDLE;
+    pSql->param = param;
+
     tscQueueAsyncRes(pSql);
     return;
   }
@@ -220,14 +223,13 @@ void taos_fetch_rows_a(TAOS_RES *taosa, void (*fp)(void *, TAOS_RES *, int), voi
   if (pCmd->command == TSDB_SQL_TABLE_JOIN_RETRIEVE) {
     tscFetchDatablockFromSubquery(pSql);
   } else if (pRes->completed) {
-    if(pCmd->command == TSDB_SQL_FETCH) {
+    if(pCmd->command == TSDB_SQL_FETCH || (pCmd->command >= TSDB_SQL_SERV_STATUS && pCmd->command <= TSDB_SQL_CURRENT_USER)) {
       if (hasMoreVnodesToTry(pSql)) {  // sequentially retrieve data from remain vnodes.
         tscTryQueryNextVnode(pSql, tscAsyncQueryRowsForNextVnode);
-        return;
       } else {
         /*
-       * all available virtual node has been checked already, now we need to check
-       * for the next subclause queries
+         * all available virtual nodes in current clause has been checked already, now try the
+         * next one in the following union subclause
          */
         if (pCmd->clauseIndex < pCmd->numOfClause - 1) {
           tscTryQueryNextClause(pSql, tscAsyncQueryRowsForNextVnode);
@@ -235,11 +237,12 @@ void taos_fetch_rows_a(TAOS_RES *taosa, void (*fp)(void *, TAOS_RES *, int), voi
         }
 
         /*
-       * 1. has reach the limitation
-       * 2. no remain virtual nodes to be retrieved anymore
+         * 1. has reach the limitation
+         * 2. no remain virtual nodes to be retrieved anymore
          */
         (*pSql->fetchFp)(param, pSql, 0);
       }
+
       return;
     } else if (pCmd->command == TSDB_SQL_RETRIEVE || pCmd->command == TSDB_SQL_RETRIEVE_LOCALMERGE) {
       // in case of show command, return no data
@@ -269,7 +272,10 @@ void taos_fetch_row_a(TAOS_RES *taosa, void (*fp)(void *, TAOS_RES *, TAOS_ROW),
 
   if (pRes->qhandle == 0) {
     tscError("qhandle is NULL");
-    tscQueueAsyncError(fp, param, TSDB_CODE_TSC_INVALID_QHANDLE);
+    pSql->param = param;
+    pRes->code = TSDB_CODE_TSC_INVALID_QHANDLE;
+
+    tscQueueAsyncRes(pSql);
     return;
   }
 
@@ -352,36 +358,17 @@ void tscProcessFetchRow(SSchedMsg *pMsg) {
 
 void tscProcessAsyncRes(SSchedMsg *pMsg) {
   SSqlObj *pSql = (SSqlObj *)pMsg->ahandle;
-//  SSqlCmd *pCmd = &pSql->cmd;
   SSqlRes *pRes = &pSql->res;
-
-//  void *taosres = pSql;
-
-  // pCmd may be released, so cache pCmd->command
-//  int cmd = pCmd->command;
-//  int code = pRes->code;
-
-  // in case of async insert, restore the user specified callback function
-//  bool shouldFree = tscShouldBeFreed(pSql);
-
-//  if (pCmd->command == TSDB_SQL_INSERT) {
-//    assert(pSql->fp != NULL);
   assert(pSql->fp != NULL && pSql->fetchFp != NULL);
-//  }
 
-//  if (pSql->fp) {
   pSql->fp = pSql->fetchFp;
   (*pSql->fp)(pSql->param, pSql, pRes->code);
-//  }
-
-//  if (shouldFree) {
-//    tscDebug("%p sqlObj is automatically freed in async res", pSql);
-//    tscFreeSqlObj(pSql);
-//  }
 }
 
+// this function will be executed by queue task threads, so the terrno is not valid
 static void tscProcessAsyncError(SSchedMsg *pMsg) {
   void (*fp)() = pMsg->ahandle;
+  terrno = *(int32_t*) pMsg->msg;
   (*fp)(pMsg->thandle, NULL, *(int32_t*)pMsg->msg);
 }
 
@@ -433,7 +420,8 @@ void tscTableMetaCallBack(void *param, TAOS_RES *res, int code) {
     tscError("%p get tableMeta failed, code:%s", pSql, tstrerror(code));
     goto _error;
   } else {
-    tscDebug("%p get tableMeta successfully", pSql);
+    const char* msg = (pCmd->command == TSDB_SQL_STABLEVGROUP)? "vgroup-list":"table-meta";
+    tscDebug("%p get %s successfully", pSql, msg);
   }
 
   if (pSql->pStream == NULL) {
@@ -481,7 +469,7 @@ void tscTableMetaCallBack(void *param, TAOS_RES *res, int code) {
         if (pCmd->command == TSDB_SQL_INSERT || pCmd->command == TSDB_SQL_SELECT) {
           tscDebug("%p redo parse sql string and proceed", pSql);
           pCmd->parseFinished = false;
-          tscResetSqlCmdObj(pCmd);
+          tscResetSqlCmdObj(pCmd, false);
 
           code = tsParseSql(pSql, true);
 
